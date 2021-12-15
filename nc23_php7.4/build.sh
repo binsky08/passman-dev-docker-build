@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 cp ../entrypoint.sh .
 docker build --no-cache -t binsky/passman-dev:nc23_php7.4 .

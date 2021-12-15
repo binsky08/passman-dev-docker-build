@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 cp ../entrypoint.sh .
 docker build -t binsky/passman-dev:nc20 .
