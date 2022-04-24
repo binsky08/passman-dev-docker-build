@@ -21,5 +21,11 @@ trap 'kill ${!}; term_handler' SIGTERM
 # wait forever
 while true
 do
-    tail -f /var/www/html/data/nextcloud.log & wait ${!}
+    if [ -f /var/www/html/data/nextcloud.log ]; then
+        tail -f /var/www/html/data/nextcloud.log & wait ${!}
+    fi
+    
+    if [ -f /var/www/html/data-autotest/nextcloud.log ]; then
+        tail -f /var/www/html/data-autotest/nextcloud.log & wait ${!}
+    fi
 done
