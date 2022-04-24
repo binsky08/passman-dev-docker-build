@@ -1,6 +1,6 @@
 # A docker based development environment for passman
 
-Based on the ubuntu:20.04 image, this repository provides Nextcloud installations with mariadb-server and php7.4 or php8.0.
+Based on ubuntu images, this repository provides Nextcloud installations with mariadb-server and php7 or php8.
 
 Brings support to run `grunt` / `grunt build` at /var/www/html/apps/passman/ to generate js and css files
 
@@ -12,6 +12,21 @@ Pull images from: [https://hub.docker.com/r/binsky/passman-dev](https://hub.dock
 
 Repository: [https://github.com/binsky08/passman-dev-docker-build](https://github.com/binsky08/passman-dev-docker-build)
 
+
+## Available versions
+
+| Nextcloud version | Base image | PHP version | Image:Tag |
+|-------------------|--------------|------------|-------------|
+| 24 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc24_php8.0 |
+| 23 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc23_php8.0 |
+| 23 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc23_php7.4 |
+| 22 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc22_php8 |
+| 22 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc22_php7.4 |
+| 21 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc21_php8 |
+| 21 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc21 |
+| 20 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc20 |
+
+
 ## Getting started
 
 ```bash
@@ -19,8 +34,14 @@ mkdir ~/passman-dev-docker
 cd ~/passman-dev-docker
 openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
 
-docker run -p 8080:80 -p 8443:443 -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/cert.pem -v ~/passman-dev-docker/key.pem:/etc/ssl/private/privkey.pem -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/fullchain.pem --name passman-dev-latest binsky/passman-dev:latest
+docker run -d -p 8080:80 -p 8443:443 \
+    -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/cert.pem \
+    -v ~/passman-dev-docker/key.pem:/etc/ssl/private/privkey.pem \
+    -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/fullchain.pem \
+    --name passman-dev-latest \
+    binsky/passman-dev:latest
 
+docker logs -f passman-dev-latest
 docker exec -it passman-dev-latest /bin/bash
 
 cd /var/www/html/apps/passman/
