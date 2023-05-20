@@ -3,6 +3,7 @@
 FROM ubuntu:22.04
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
+        /bin/bash -c "debconf-set-selections <<< 'tzdata    tzdata/Zones/Europe select  Madrid'" && \
         /bin/bash -c "echo \"Europe/Zurich\" > /etc/timezone " && \
         /bin/bash -c "ln -fs /usr/share/zoneinfo/`cat /etc/timezone` /etc/localtime" && \
         apt-get -y update && apt-get install -y \
@@ -12,7 +13,6 @@ RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         /bin/bash -c "debconf-set-selections <<< 'mariadb-server mysql-server/root_password password PASS'" && \
         /bin/bash -c "debconf-set-selections <<< 'mariadb-server mysql-server/root_password_again password PASS'" && \
-        /bin/bash -c "debconf-set-selections <<< 'tzdata    tzdata/Zones/Europe select  Madrid'" && \
         apt-get install -y \
         apache2 \
         cowsay \
@@ -23,8 +23,6 @@ RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         software-properties-common \
         wget \
         openssh-server \
-        npm \
-        ruby-dev \
         sudo
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && add-apt-repository -y ppa:ondrej/php
