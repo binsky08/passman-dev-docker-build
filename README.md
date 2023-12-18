@@ -17,6 +17,7 @@ Repository: [https://github.com/binsky08/passman-dev-docker-build](https://githu
 
 | Nextcloud version | Base image | PHP version | Image:Tag |
 |-------------------|--------------|------------|-------------|
+| 28 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc28_php8.2 |
 | 27 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc27_php8.2 |
 | 27 | ubuntu:22.04 | 8.1 | binsky/passman-dev:nc27_php8.1 |
 | 26 | ubuntu:22.04 | 8.1 | binsky/passman-dev:nc26_php8.1 |
