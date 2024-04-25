@@ -17,6 +17,7 @@ Repository: [https://github.com/binsky08/passman-dev-docker-build](https://githu
 
 | Nextcloud version | Base image | PHP version | Image:Tag |
 |-------------------|--------------|------------|-------------|
+| 29 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc29_php8.3 |
 | 28 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc28_php8.3 |
 | 28 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc28_php8.2 |
 | 27 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc27_php8.2 |
@@ -41,6 +42,9 @@ Repository: [https://github.com/binsky08/passman-dev-docker-build](https://githu
 mkdir ~/passman-dev-docker
 cd ~/passman-dev-docker
 openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
+
+# edit and add the following line to the run command, to directly mount the passman repository folder as local docker volume mount
+# -v /home/myuser/dev/passman:/var/www/html/apps/passman \
 
 docker run -d -p 8080:80 -p 8443:443 \
     -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/cert.pem \
