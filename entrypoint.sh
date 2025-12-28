@@ -23,6 +23,12 @@ else
     service mysql start
 fi
 
+if [ ! -f /etc/ssl/private/cert.pem ] || [ ! -f /etc/ssl/private/privkey.pem ]; then
+    cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/ssl/private/privkey.pem
+    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/ssl/private/cert.pem
+    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/ssl/private/fullchain.pem
+fi
+
 service apache2 start
 
 sudo -u www-data php /var/www/html/occ app:disable passman
