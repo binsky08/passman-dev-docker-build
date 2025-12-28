@@ -28,6 +28,10 @@ service apache2 start
 sudo -u www-data php /var/www/html/occ app:disable passman
 sudo -u www-data php /var/www/html/occ app:enable passman
 
+if [ $DEMO_EXTERNAL_FQDN != "" ]; then
+    sudo -u www-data php /var/www/html/occ config:system:set trusted_domains 6 --value=$DEMO_EXTERNAL_FQDN
+fi
+
 trap 'kill ${!}; term_handler' SIGTERM
 
 # wait forever
