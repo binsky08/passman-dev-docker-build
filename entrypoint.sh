@@ -34,7 +34,7 @@ service apache2 start
 sudo -u www-data php /var/www/html/occ app:disable ${NC_ENABLE_APP_ID:-passman}
 sudo -u www-data php /var/www/html/occ app:enable ${NC_ENABLE_APP_ID:-passman}
 
-if [ $DEMO_EXTERNAL_FQDN != "" ]; then
+if [ "$DEMO_EXTERNAL_FQDN" != "" ]; then
     sudo -u www-data php /var/www/html/occ config:system:set trusted_domains 6 --value=$DEMO_EXTERNAL_FQDN
 fi
 
