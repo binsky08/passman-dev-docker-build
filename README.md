@@ -13,7 +13,7 @@ Pull images from: [https://hub.docker.com/r/binsky/passman-dev](https://hub.dock
 Repository: [https://github.com/binsky08/passman-dev-docker-build](https://github.com/binsky08/passman-dev-docker-build)
 
 
-## Available versions
+## Available development versions
 
 | Nextcloud version | Base image | PHP version | Image:Tag |
 |-------------------|--------------|------------|-------------|
@@ -39,6 +39,12 @@ Repository: [https://github.com/binsky08/passman-dev-docker-build](https://githu
 | 21 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc21_php8 |
 | 21 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc21 |
 | 20 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc20 |
+
+## Available demo versions
+
+| Nextcloud version | Base image | PHP version | Image:Tag |
+|-------------------|--------------|------------|-------------|
+| 33 | ubuntu:24.04 | 8.4 | binsky/passman-demo:nc33_php8.4 |
 
 
 ## Getting started

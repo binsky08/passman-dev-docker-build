@@ -3,7 +3,7 @@
 # - nextcloud/viewer (usually a default core app; will be added to prevent getting flushed with errors during runtime)
 # - https://github.com/nextcloud/notifications (usually a default core app; will be added since passman kinda depends on it)
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS base
 
 ENV SETUP_NEXTCLOUD_VERSION=stable33
 ENV SETUP_NEXTCLOUD_VIEWER_BRANCH=stable33
@@ -11,22 +11,17 @@ ENV SETUP_NEXTCLOUD_NOTIFICATIONS_BRANCH=stable33
 ENV SETUP_PHP_VERSION=php8.4
 ENV SETUP_PHPUNIT_VERSION=12
 ENV SETUP_PASSMAN_BRANCH=master
+ENV SETUP_PASSMAN_REPO=https://github.com/nextcloud/passman
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         /bin/bash -c "debconf-set-selections <<< 'tzdata    tzdata/Zones/Europe select  Madrid'" && \
         /bin/bash -c "echo \"Europe/Zurich\" > /etc/timezone " && \
         /bin/bash -c "ln -fs /usr/share/zoneinfo/`cat /etc/timezone` /etc/localtime" && \
-        apt-get -y update && apt-get install -y \
-        npm \
-        ruby-dev
-
-RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         /bin/bash -c "debconf-set-selections <<< 'mariadb-server mysql-server/root_password password PASS'" && \
         /bin/bash -c "debconf-set-selections <<< 'mariadb-server mysql-server/root_password_again password PASS'" && \
-        apt-get install -y \
+        apt update && \
+        apt install -y \
         apache2 \
-        cowsay \
-        cowsay-off \
         git \
         curl \
         mariadb-server \
@@ -38,7 +33,7 @@ RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && add-apt-repository -y ppa:ondrej/php
         
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
-        apt-get install -y \
+        apt install -y \
         libapache2-mod-${SETUP_PHP_VERSION} \
         ${SETUP_PHP_VERSION} \
         ${SETUP_PHP_VERSION}-mysql \
@@ -52,17 +47,20 @@ RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         ${SETUP_PHP_VERSION}-gmp \
         ${SETUP_PHP_VERSION}-imagick
 
+RUN a2enmod ssl
+RUN ln -s /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-enabled
+RUN git clone -b $SETUP_PASSMAN_BRANCH $SETUP_PASSMAN_REPO /var/www/passman
+ADD https://raw.githubusercontent.com/nextcloud/travis_ci/master/before_install.sh /var/www/passman
+
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         wget -O /usr/local/bin/phpunit https://phar.phpunit.de/phpunit-${SETUP_PHPUNIT_VERSION}.phar && \
         wget -O /usr/local/bin/composer https://getcomposer.org/download/latest-stable/composer.phar && \
         chmod +x /usr/local/bin/phpunit /usr/local/bin/composer
 
-RUN gem install sass
-RUN a2enmod ssl
-RUN ln -s /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-enabled
-RUN git clone -b $SETUP_PASSMAN_BRANCH https://github.com/nextcloud/passman /var/www/passman
-RUN cd /var/www/passman && npm install && npm install -g grunt-cli
-ADD https://raw.githubusercontent.com/nextcloud/travis_ci/master/before_install.sh /var/www/passman
+RUN mkdir /srv/nctemp && chown -R www-data:www-data /srv/nctemp
+
+
+FROM base AS build
 
 RUN service mariadb restart && \
     mysql -uroot -pPASS -e "SET PASSWORD = PASSWORD('');" && \
@@ -78,9 +76,12 @@ RUN service mariadb restart && \
     git clone --depth 1 -b $SETUP_NEXTCLOUD_VIEWER_BRANCH https://github.com/nextcloud/viewer.git /var/www/server/apps/viewer && \
     git clone --depth 1 -b $SETUP_NEXTCLOUD_NOTIFICATIONS_BRANCH https://github.com/nextcloud/notifications.git /var/www/server/apps/notifications && \
     mv /var/www/server/* /var/www/html/ && \
+    rm -r /var/www/server && \
+    chown -R www-data:www-data /var/www
+
+RUN service mariadb restart && \
     cd /var/www/html/ && \
     chmod +x occ && \
-    service mariadb restart && \
     sed -i 's/\/var\/www\/server/\/var\/www\/html/g' /var/www/html/config/config.php && \
     ./occ check && \
     ./occ status && \
@@ -92,11 +93,15 @@ RUN service mariadb restart && \
     ./occ config:system:set loglevel --value=1 && \
     ./occ config:system:set tempdirectory --value=/srv/nctemp && \
     ./occ config:system:set trusted_domains 2 --value=172.17.0.2 && \
-    ./occ config:system:set trusted_domains 3 --value=passman.cc && \
+    ./occ config:system:set trusted_domains 3 --value=10.0.2.2 && \
     ./occ config:system:set trusted_domains 4 --value=demo.passman.cc && \
-    ./occ config:system:set trusted_domains 5 --value=10.0.2.2 && \
-    mkdir /srv/nctemp && \
-    chown -R www-data /var/www /srv/nctemp
+    chown -R www-data:www-data /var/www
+
+
+FROM base AS demo
+
+COPY --from=build /var/www/html /var/www/html
+COPY --from=build /var/lib/mysql /var/lib/mysql
 
 EXPOSE 80
 EXPOSE 443
@@ -107,4 +112,16 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD []
 
-#/usr/games/cowsay -f dragon.cow "you might now login using username:admin password:admin" && \
+
+FROM demo AS dev
+
+RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
+        apt -y update && \
+        apt install -y \
+        npm 
+
+RUN npm install -g sass grunt-cli
+RUN cd /var/www/html/apps/passman && \
+        npm install && \
+        chown -R www-data:www-data /var/www/html/apps/passman
+
