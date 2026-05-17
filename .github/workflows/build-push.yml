@@ -1,0 +1,276 @@
+name: Build and push container images
+
+on:
+  push:
+    branches: [main, master, actions]
+  pull_request:
+    branches: [main, master, actions]
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: "Build every image context (ignore path filters)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+# Native per-arch runners (no QEMU). PRs: amd64 only. Pushes: amd64 + arm64 + manifest list per tag.
+# For private repos without free arm64 hosted runners, switch build-arm64 to a self-hosted arm64 label.
+env:
+  CACHE_SCOPE_PREFIX: passman-docker
+
+jobs:
+  matrix-prep:
+    name: Prepare build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      should_run: ${{ steps.gen.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute changed files
+        id: changes
+        run: |
+          set -euo pipefail
+          FULL=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.rebuild_all }}" = "true" ]; then
+              FULL=true
+            else
+              echo "full=false" >> "$GITHUB_OUTPUT"
+              git diff --name-only HEAD~1 HEAD > changed.txt 2>/dev/null || touch changed.txt
+              exit 0
+            fi
+          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              FULL=true
+            fi
+          fi
+          if [ "$FULL" = true ]; then
+            : > changed.txt
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "full=false" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" \
+              > changed.txt
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            git diff --name-only "$BEFORE" "${{ github.sha }}" > changed.txt
+          else
+            touch changed.txt
+          fi
+
+      - name: Generate matrix JSON
+        id: gen
+        run: |
+          set -euo pipefail
+          EXTRA=""
+          if [ "${{ steps.changes.outputs.full }}" = "true" ]; then
+            EXTRA="--full"
+          fi
+          MATRIX_JSON="$(python3 ci/generate_matrix.py --repo-root "$GITHUB_WORKSPACE" $EXTRA --changed-list changed.txt)"
+          echo "should_run=$(echo "$MATRIX_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['should_run'])")" >> "$GITHUB_OUTPUT"
+          INCLUDE="$(echo "$MATRIX_JSON" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)['include']))")"
+          {
+            echo 'matrix<<MATRIX_EOF'
+            echo "{\"include\":$INCLUDE}"
+            echo MATRIX_EOF
+          } >> "$GITHUB_OUTPUT"
+
+  build-amd64:
+    name: amd64 ${{ matrix.context }} (${{ matrix.build_mode == 'stage' && matrix.target || 'final' }})
+    needs: matrix-prep
+    if: needs.matrix-prep.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
+    env:
+      ARCH_TAG: amd64
+      BUILD_PLATFORM: linux/amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject shared entrypoint
+        run: |
+          set -euo pipefail
+          cp entrypoint.sh "${{ matrix.context }}/entrypoint.sh"
+
+      - name: Tags for registry (per-arch suffix on push)
+        id: regtags
+        run: |
+          set -euo pipefail
+          RAW="${{ matrix.tags }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tags=$RAW" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          out=""
+          IFS=',' read -ra PARTS <<< "$RAW"
+          for part in "${PARTS[@]}"; do
+            part="$(echo "$part" | xargs)"
+            img="${part%:*}"
+            tag="${part#*:}"
+            [ -n "$out" ] && out+=","
+            out+="${img}:${tag}-${ARCH_TAG}"
+          done
+          echo "tags=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (multi-stage target)
+        if: matrix.build_mode == 'stage'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.regtags.outputs.tags }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.context }}-${{ matrix.build_mode }}-${{ matrix.target }}-amd64
+
+      - name: Build and push (default final stage)
+        if: matrix.build_mode == 'final'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.regtags.outputs.tags }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.context }}-${{ matrix.build_mode }}-${{ matrix.target }}-amd64
+
+  build-arm64:
+    name: arm64 ${{ matrix.context }} (${{ matrix.build_mode == 'stage' && matrix.target || 'final' }})
+    needs: matrix-prep
+    if: needs.matrix-prep.outputs.should_run == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
+    env:
+      ARCH_TAG: arm64
+      BUILD_PLATFORM: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject shared entrypoint
+        run: |
+          set -euo pipefail
+          cp entrypoint.sh "${{ matrix.context }}/entrypoint.sh"
+
+      - name: Tags for registry (per-arch suffix)
+        id: regtags
+        run: |
+          set -euo pipefail
+          RAW="${{ matrix.tags }}"
+          out=""
+          IFS=',' read -ra PARTS <<< "$RAW"
+          for part in "${PARTS[@]}"; do
+            part="$(echo "$part" | xargs)"
+            img="${part%:*}"
+            tag="${part#*:}"
+            [ -n "$out" ] && out+=","
+            out+="${img}:${tag}-${ARCH_TAG}"
+          done
+          echo "tags=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (multi-stage target)
+        if: matrix.build_mode == 'stage'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: true
+          tags: ${{ steps.regtags.outputs.tags }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.context }}-${{ matrix.build_mode }}-${{ matrix.target }}-arm64
+
+      - name: Build and push (default final stage)
+        if: matrix.build_mode == 'final'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: true
+          tags: ${{ steps.regtags.outputs.tags }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.context }}-${{ matrix.build_mode }}-${{ matrix.target }}-arm64
+
+  merge-manifests:
+    name: Manifest ${{ matrix.context }} (${{ matrix.build_mode == 'stage' && matrix.target || 'final' }})
+    needs: [matrix-prep, build-amd64, build-arm64]
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.matrix-prep.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create multi-arch index (public tags)
+        run: |
+          set -euo pipefail
+          RAW="${{ matrix.tags }}"
+          IFS=',' read -ra PARTS <<< "$RAW"
+          for part in "${PARTS[@]}"; do
+            part="$(echo "$part" | xargs)"
+            img="${part%:*}"
+            tag="${part#*:}"
+            docker buildx imagetools create -t "$part" "${img}:${tag}-amd64" "${img}:${tag}-arm64"
+          done

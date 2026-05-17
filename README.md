@@ -89,3 +89,19 @@ sshfs root@172.17.0.3:/var/www/html ~/passman-dev-docker/passman-nc-complete -o 
 # unmount with
 fusermount -u ~/passman-dev-docker/passman-nc-complete
 ```
+
+## CI (GitHub Actions → Docker Hub)
+
+Workflow: `.github/workflows/build-push.yml`. On push to `main` or `master`, it builds and pushes only the image contexts affected by the commit (each top-level directory that contains a `Dockerfile`). Changes under `entrypoint.sh`, `ci/`, or `.github/` trigger a full rebuild of every context. Pull requests run the same Docker builds with push disabled (single-arch **amd64** only so images can be loaded locally).
+
+Pushes to Docker Hub publish **multi-architecture tags** (**`linux/amd64`** and **`linux/arm64`**) as one **manifest list** per public tag (`nc33_php8.4`, `latest`, etc.): native **amd64** builds on `ubuntu-latest` and **arm64** builds on GitHub’s **`ubuntu-24.04-arm`** hosts (same idea as a dedicated ARM runner on GitLab—no QEMU). CI first pushes per-arch tags (`…:-amd64`, `…:-arm64`), then runs **`docker buildx imagetools create`** so the unsuffixed tags point at both architectures.
+
+Pull requests still build **amd64** only (validate Dockerfiles; no manifest job).
+
+Repository secrets: **DOCKERHUB_USERNAME** and **DOCKERHUB_TOKEN**.
+
+Manual runs: **Actions → Build and push container images → Run workflow**. **rebuild all** runs every context; leave it off to rebuild only images touched since the previous commit (`HEAD~1`…`HEAD`).
+
+Config: `ci/registry.json` sets the Docker Hub namespace, repository names (`passman-dev` / `passman-demo`), and which context receives the rolling tag **`latest`** on `passman-dev` (`dev_latest_context`). Demo images are built automatically for any Dockerfile that defines a `demo` build stage (`FROM … AS demo`).
+
+Adding a new variant: create a new directory with a `Dockerfile` (and optional `build.sh` for local use); CI picks it up without editing the workflow.
