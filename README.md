@@ -1,107 +1,172 @@
-# A docker based development environment for passman
+# Passman Docker images (dev & demo)
 
-Based on ubuntu images, this repository provides Nextcloud installations with mariadb-server and php7 or php8.
+This repository builds and publishes **Docker images** for the [Passman](https://github.com/nextcloud/passman) Nextcloud app. Each image is a ready-to-run **Nextcloud** stack (Apache, MariaDB, PHP) with Passman pre-installed and configured (with the latest Passman version during image build time).
 
-Brings support to run `grunt` / `grunt build` at /var/www/html/apps/passman/ to generate js and css files
+Two image families serve different goals:
 
-User: admin
+| Image family | Docker Hub | Purpose |
+|--------------|------------|---------|
+| **Development** (`passman-dev`) | [binsky/passman-dev](https://hub.docker.com/r/binsky/passman-dev) | Local hacking: mount your Passman checkout, run `grunt`, use SSH/`sshfs`, try many Nextcloud/PHP versions. |
+| **Demo** (`passman-demo`) | [binsky/passman-demo](https://hub.docker.com/r/binsky/passman-demo) | Pre-baked, production-like instances (e.g. public demo hosts) without dev tooling. |
 
-Password: admin
+**Default login** (all images): user `admin`, password `admin`.
 
-Pull images from: [https://hub.docker.com/r/binsky/passman-dev](https://hub.docker.com/r/binsky/passman-dev)
+**Rolling tag (only for dev images):** `binsky/passman-dev:latest` tracks the newest supported dev stack (currently **Nextcloud 33 / PHP 8.4** — see `ci/registry.json`).
 
-Repository: [https://github.com/binsky08/passman-dev-docker-build](https://github.com/binsky08/passman-dev-docker-build)
+**Source:** [github.com/binsky08/passman-dev-docker-build](https://github.com/binsky08/passman-dev-docker-build)
 
+---
 
-## Available development versions
+## Development vs demo images
 
-| Nextcloud version | Base image | PHP version | Image:Tag |
-|-------------------|--------------|------------|-------------|
-| 33 | ubuntu:24.04 | 8.4 | binsky/passman-dev:nc33_php8.4 |
-| 32 | ubuntu:24.04 | 8.4 | binsky/passman-dev:nc32_php8.4 |
-| 31 | ubuntu:24.04 | 8.4 | binsky/passman-dev:nc31_php8.4 |
-| 31 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc31_php8.3 |
-| 30 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc30_php8.3 |
-| 29 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc29_php8.3 |
-| 28 | ubuntu:22.04 | 8.3 | binsky/passman-dev:nc28_php8.3 |
-| 28 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc28_php8.2 |
-| 27 | ubuntu:22.04 | 8.2 | binsky/passman-dev:nc27_php8.2 |
-| 27 | ubuntu:22.04 | 8.1 | binsky/passman-dev:nc27_php8.1 |
-| 26 | ubuntu:22.04 | 8.1 | binsky/passman-dev:nc26_php8.1 |
-| 25 | ubuntu:22.04 | 8.1 | binsky/passman-dev:nc25_php8.1 |
-| 25 | ubuntu:22.04 | 8.0 | binsky/passman-dev:nc25_php8.0 |
-| 24 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc24_php8.0 |
-| 24 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc24_php7.4 |
-| 23 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc23_php8.0 |
-| 23 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc23_php7.4 |
-| 22 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc22_php8 |
-| 22 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc22_php7.4 |
-| 21 | ubuntu:20.04 | 8.0 | binsky/passman-dev:nc21_php8 |
-| 21 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc21 |
-| 20 | ubuntu:20.04 | 7.4 | binsky/passman-dev:nc20 |
+### Development (`binsky/passman-dev`)
 
-## Available demo versions
+Use these when you work on Passman itself:
 
-| Nextcloud version | Base image | PHP version | Image:Tag |
-|-------------------|--------------|------------|-------------|
-| 33 | ubuntu:24.04 | 8.4 | binsky/passman-demo:nc33_php8.4 |
+- **Passman source** is cloned at build time; you typically **bind-mount** your local repo to `/var/www/html/apps/passman`.
+- **Node/npm + grunt** are available (on newer stacks) so you can build frontend assets inside the container.
+- **SSH** is enabled so you can `ssh` in or mount the whole Nextcloud tree with **sshfs** (IDE autocompletion).
+- Several **Nextcloud + PHP** stacks are available; older recipes live in `archived/` (see [Published image tags](#published-image-tags)).
 
+Older directories use a **single-stage** Dockerfile (one image = dev). Newer stacks (e.g. `nc33_php8.4`) use a **multi-stage** Dockerfile: stage `demo` is the runtime base; stage `dev` adds npm/grunt on top.
 
-## Getting started
+### Demo (`binsky/passman-demo`)
+
+Use these for **hosted demos** or any setup where you only need a running instance:
+
+- Same Nextcloud + Passman + DB **baked in at build time** (no bind-mount workflow).
+- **No** dev extras (no grunt toolchain on top of the demo stage).
+- Built from the **`demo`** stage of multi-stage Dockerfiles. Contexts without a `demo` stage do not publish a demo image.
+
+Demo images (as well as dev images) can honor `DEMO_EXTERNAL_FQDN` at runtime (see `entrypoint.sh`) to automatically add an extra trusted domain.
+
+---
+
+## Published image tags
+
+Tags match the **directory name**: `nc<nextcloud>_php<version>` (e.g. `nc33_php8.4`). On Docker Hub, public tags are **multi-arch** (`linux/amd64` + `linux/arm64`); see [CI](#ci-github-actions--docker-hub).
+
+### Built by CI today
+
+Only top-level directories with a `Dockerfile` are built (not `archived/`):
+
+| NC | Ubuntu | PHP | Development | Demo |
+|----|--------|-----|-------------|------|
+| 33 | 24.04 | 8.4 | `binsky/passman-dev:nc33_php8.4` | `binsky/passman-demo:nc33_php8.4` |
+| 32 | 24.04 | 8.4 | `binsky/passman-dev:nc32_php8.4` | — (single-stage Dockerfile, dev only) |
+
+Rolling dev tag: **`binsky/passman-dev:latest`** → same as `nc33_php8.4` (set in `ci/registry.json` → `dev_latest_context`).
+
+### Older stacks
+
+Dockerfiles for Nextcloud 20–31 (various PHP versions) live under **`archived/`** for reference and manual rebuilds. They are **not** part of the CI matrix unless moved back to the repository root. Many corresponding tags may still exist on [Docker Hub](https://hub.docker.com/r/binsky/passman-dev/tags) from earlier releases.
+
+---
+
+## Repository layout
+
+```
+passman-dev-docker-build/
+├── entrypoint.sh
+├── nc33_php8.4/              # active: multi-stage (demo + dev)
+├── nc32_php8.4/              # active: single-stage (dev)
+├── archived/                 # legacy Dockerfiles (not built by CI)
+├── ci/
+│   ├── registry.json
+│   └── generate_matrix.py
+└── .github/workflows/build-push.yml
+```
+
+**Add a new variant:** create a top-level `ncXX_phpY.Z/` with a `Dockerfile` (and optional `build.sh` for local use). CI picks it up automatically. Set `dev_latest_context` in `ci/registry.json` if it should own `passman-dev:latest`.
+
+---
+
+## Quick start (development)
+
+Create TLS files once (self-signed is fine for localhost):
 
 ```bash
-mkdir ~/passman-dev-docker
-cd ~/passman-dev-docker
+mkdir -p ~/passman-dev-docker && cd ~/passman-dev-docker
 openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
+```
 
-# edit and add the following line to the run command, to directly mount the passman repository folder as local docker volume mount
-# -v /home/myuser/dev/passman:/var/www/html/apps/passman \
+Run the latest dev image (or pick a specific tag from the table above). Optionally add  
+`-v /path/to/passman:/var/www/html/apps/passman` to use your local Passman clone.
 
+```bash
 docker run -d -p 8080:80 -p 8443:443 \
-    -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/cert.pem \
-    -v ~/passman-dev-docker/key.pem:/etc/ssl/private/privkey.pem \
-    -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/fullchain.pem \
-    --name passman-dev-latest \
-    binsky/passman-dev:latest
+  -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/cert.pem \
+  -v ~/passman-dev-docker/key.pem:/etc/ssl/private/privkey.pem \
+  -v ~/passman-dev-docker/certificate.pem:/etc/ssl/private/fullchain.pem \
+  --name passman-dev \
+  binsky/passman-dev:latest
 
-docker logs -f passman-dev-latest
-docker exec -it passman-dev-latest /bin/bash
-
-cd /var/www/html/apps/passman/
-# here is the passman repository located
+docker logs -f passman-dev
+docker exec -it passman-dev bash
 ```
 
-Open instance in browser: [https://localhost:8443](https://localhost:8443)
+Open **https://localhost:8443** (HTTP also on port 8080).
 
+Inside the container, Passman lives at `/var/www/html/apps/passman/` — run `grunt` / `grunt build` there on stacks that include the dev tooling.
 
-## Mount to local filesystem
+### Mount Nextcloud via SSH (optional)
 
-- copy your ssh public key to /root/.ssh/authorized_keys
-- type `ip a` in the container to get its ip address
-- try to login
+For full-tree IDE support:
 
-(Hint: the complete nextcloud folder will be mounted to enable IDE's autocompletion)
+1. Add your SSH public key to `/root/.ssh/authorized_keys` in the container.
+2. Get the container IP: `docker exec passman-dev ip -4 addr show`.
+3. On the host:
 
-```
-mkdir ~/passman-dev-docker/passman-nc-complete
-sshfs root@172.17.0.3:/var/www/html ~/passman-dev-docker/passman-nc-complete -o idmap=user -o uid=1000 -o gid=1000
+```bash
+mkdir -p ~/passman-dev-docker/passman-nc-complete
+sshfs root@<container-ip>:/var/www/html ~/passman-dev-docker/passman-nc-complete \
+  -o idmap=user -o uid=1000 -o gid=1000
 
-# unmount with
+# unmount:
 fusermount -u ~/passman-dev-docker/passman-nc-complete
 ```
 
 ## CI (GitHub Actions → Docker Hub)
 
-Workflow: `.github/workflows/build-push.yml`. On push to `main` or `master`, it builds and pushes only the image contexts affected by the commit (each top-level directory that contains a `Dockerfile`). Changes under `entrypoint.sh`, `ci/`, or `.github/` trigger a full rebuild of every context. Pull requests run the same Docker builds with push disabled (single-arch **amd64** only so images can be loaded locally).
+Workflow file: [`.github/workflows/build-push.yml`](.github/workflows/build-push.yml)
 
-Pushes to Docker Hub publish **multi-architecture tags** (**`linux/amd64`** and **`linux/arm64`**) as one **manifest list** per public tag (`nc33_php8.4`, `latest`, etc.): native **amd64** builds on `ubuntu-latest` and **arm64** builds on GitHub’s **`ubuntu-24.04-arm`** hosts (same idea as a dedicated ARM runner on GitLab—no QEMU). CI first pushes per-arch tags (`…:-amd64`, `…:-arm64`), then runs **`docker buildx imagetools create`** so the unsuffixed tags point at both architectures.
+### When it runs
 
-Pull requests still build **amd64** only (validate Dockerfiles; no manifest job).
+| Event | Builds | Pushes to Docker Hub |
+|-------|--------|----------------------|
+| Push to `main` / `master` | Affected contexts only (see below) | Yes |
+| Pull request | Same path logic | No (amd64 build only, smoke-test Dockerfiles) |
+| Manual **workflow_dispatch** | All contexts if **rebuild all**; else changes since `HEAD~1` | Yes |
 
-Repository secrets: **DOCKERHUB_USERNAME** and **DOCKERHUB_TOKEN**.
+### What gets built
 
-Manual runs: **Actions → Build and push container images → Run workflow**. **rebuild all** runs every context; leave it off to rebuild only images touched since the previous commit (`HEAD~1`…`HEAD`).
+- **Matrix** is generated by [`ci/generate_matrix.py`](ci/generate_matrix.py) from every top-level directory that contains a `Dockerfile`.
+- **Incremental builds:** only contexts with file changes under their directory are rebuilt.
+- **Full rebuild** if `entrypoint.sh`, anything under `ci/`, or `.github/` changes.
+- Per context:
+  - **`passman-dev`** — always (final stage, or `dev` stage when multi-stage).
+  - **`passman-demo`** — only if the Dockerfile has `FROM … AS demo`.
+- Tags and Hub repo names come from [`ci/registry.json`](ci/registry.json) (`dev_latest_context` → `passman-dev:latest`).
 
-Config: `ci/registry.json` sets the Docker Hub namespace, repository names (`passman-dev` / `passman-demo`), and which context receives the rolling tag **`latest`** on `passman-dev` (`dev_latest_context`). Demo images are built automatically for any Dockerfile that defines a `demo` build stage (`FROM … AS demo`).
+### Multi-architecture (no QEMU)
 
-Adding a new variant: create a new directory with a `Dockerfile` (and optional `build.sh` for local use); CI picks it up without editing the workflow.
+On push, three job types run:
+
+1. **`build-amd64`** — `ubuntu-latest`, `linux/amd64`, pushes `…:<tag>-amd64`
+2. **`build-arm64`** — `ubuntu-24.04-arm`, `linux/arm64`, pushes `…:<tag>-arm64`
+3. **`merge-manifests`** — `docker buildx imagetools create` so public tags (`nc33_php8.4`, `latest`, …) are **manifest lists** for amd64 + arm64
+
+`docker pull binsky/passman-dev:latest` then works on both Intel/AMD and ARM64 Macs/servers.
+
+**Private repositories:** GitHub’s free `ubuntu-24.04-arm` runners may be unavailable; point `build-arm64` at a self-hosted ARM runner label in the workflow.
+
+### Secrets (repository settings)
+
+| Secret | Purpose |
+|--------|---------|
+| `DOCKERHUB_USERNAME` | Docker Hub login |
+| `DOCKERHUB_TOKEN` | Access token (recommended, not account password) |
+
+### Local builds
+
+Each context may ship a `build.sh` that copies `entrypoint.sh` and runs `docker build` (see `nc33_php8.4/build.sh` for dev + demo targets). CI does not use `build.sh`; it invokes Buildx directly with the same contexts.
