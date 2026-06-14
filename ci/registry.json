@@ -2,5 +2,5 @@
   "namespace": "binsky",
   "dev_repository": "passman-dev",
   "demo_repository": "passman-demo",
-  "dev_latest_context": "nc33_php8.4"
+  "dev_latest_context": "nc34_php8.5"
 }

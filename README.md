@@ -11,7 +11,7 @@ Two image families serve different goals:
 
 **Default login** (all images): user `admin`, password `admin`.
 
-**Rolling tag (only for dev images):** `binsky/passman-dev:latest` tracks the newest supported dev stack (currently **Nextcloud 33 / PHP 8.4** — see `ci/registry.json`).
+**Rolling tag (only for dev images):** `binsky/passman-dev:latest` tracks the newest supported dev stack (see `ci/registry.json`).
 
 **Source:** [github.com/binsky08/passman-dev-docker-build](https://github.com/binsky08/passman-dev-docker-build)
 
@@ -52,6 +52,7 @@ Only top-level directories with a `Dockerfile` are built (not `archived/`):
 
 | NC | Ubuntu | PHP | Development | Demo |
 |----|--------|-----|-------------|------|
+| 34 | 26.04 | 8.5 | `binsky/passman-dev:nc34_php8.5` | `binsky/passman-demo:nc34_php8.5` |
 | 33 | 24.04 | 8.4 | `binsky/passman-dev:nc33_php8.4` | `binsky/passman-demo:nc33_php8.4` |
 | 32 | 24.04 | 8.4 | `binsky/passman-dev:nc32_php8.4` | — (single-stage Dockerfile, dev only) |
 
