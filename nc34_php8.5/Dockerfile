@@ -51,7 +51,8 @@ RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         ${SETUP_PHP_VERSION}-intl \
         ${SETUP_PHP_VERSION}-bcmath \
         ${SETUP_PHP_VERSION}-gmp \
-        ${SETUP_PHP_VERSION}-imagick
+        ${SETUP_PHP_VERSION}-imagick \
+        ${SETUP_PHP_VERSION}-pcov
 
 RUN a2enmod ssl
 RUN ln -s /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-enabled
