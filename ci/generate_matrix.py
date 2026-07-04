@@ -92,23 +92,33 @@ def normalize_changed_path(line: str) -> str:
 
 
 def expand_affected(
+    repo_root: Path,
+    registry: dict,
     contexts: set[str],
     changed_files: list[str],
 ) -> set[str] | None:
     """
     Return contexts to build, or None if everything should rebuild.
+
+    Full rebuild only when shared runtime inputs change (entrypoint.sh).
+    ci/registry.json updates only rebuild dev_latest_context (for :latest tag).
+    Other ci/ or .github/ changes do not rebuild images (use workflow_dispatch
+    "rebuild all" when the pipeline itself needs a full republish).
     """
     affected: set[str] = set()
     for raw in changed_files:
         path = normalize_changed_path(raw)
         if not path:
             continue
-        if (
-            path == "entrypoint.sh"
-            or path.startswith("ci/")
-            or path.startswith(".github/")
-        ):
+        if path == "entrypoint.sh":
             return None
+        if path == "ci/registry.json":
+            latest = registry.get("dev_latest_context")
+            if latest and latest in contexts:
+                affected.add(latest)
+            continue
+        if path.startswith("ci/") or path.startswith(".github/"):
+            continue
         top = path.split("/")[0]
         if top in contexts:
             affected.add(top)
@@ -152,7 +162,7 @@ def main() -> int:
     if args.full:
         to_build = set(all_contexts)
     else:
-        aff = expand_affected(ctx_set, changed)
+        aff = expand_affected(repo_root, registry, ctx_set, changed)
         if aff is None:
             to_build = ctx_set
         else:
