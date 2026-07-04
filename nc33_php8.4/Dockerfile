@@ -124,4 +124,3 @@ RUN npm install -g sass grunt-cli
 RUN cd /var/www/html/apps/passman && \
         npm install && \
         chown -R www-data:www-data /var/www/html/apps/passman
-
