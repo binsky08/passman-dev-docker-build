@@ -10,7 +10,8 @@ ENV SETUP_NEXTCLOUD_VIEWER_BRANCH=stable33
 ENV SETUP_NEXTCLOUD_NOTIFICATIONS_BRANCH=stable33
 ENV SETUP_PHP_VERSION=php8.4
 ENV SETUP_PHPUNIT_VERSION=12
-ENV SETUP_PASSMAN_BRANCH=master
+# tag 2.5.1 is the last version supporting nc33
+ENV SETUP_PASSMAN_BRANCH="2.5.1"
 ENV SETUP_PASSMAN_REPO=https://github.com/nextcloud/passman
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
