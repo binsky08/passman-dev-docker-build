@@ -28,6 +28,8 @@ sudo -u www-data php /var/www/html/occ app:enable ${NC_ENABLE_APP_ID:-passman}
 
 if [ "$DEMO_EXTERNAL_FQDN" != "" ]; then
     sudo -u www-data php /var/www/html/occ config:system:set trusted_domains 5 --value=$DEMO_EXTERNAL_FQDN
+    # force https usage/redirects for the demo when providing a custom fqdn (as as simple fix for the demo SCP issue)
+    sudo -u www-data php /var/www/html/occ config:system:set overwriteprotocol --value=https
 fi
 
 if [ ! -f /etc/ssl/private/cert.pem ] || [ ! -f /etc/ssl/private/privkey.pem ]; then
