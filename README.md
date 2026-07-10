@@ -38,7 +38,7 @@ Use these for **hosted demos** or any setup where you only need a running instan
 - **No** dev extras (no grunt toolchain on top of the demo stage).
 - Built from the **`demo`** stage of multi-stage Dockerfiles. Contexts without a `demo` stage do not publish a demo image.
 
-Demo images (as well as dev images) can honor `DEMO_EXTERNAL_FQDN` at runtime (see `entrypoint.sh`) to automatically add an extra trusted domain.
+Demo images (as well as dev images) can honor `DEMO_EXTERNAL_FQDN` at runtime (see `entrypoint.sh`) to automatically add an extra trusted domain. This will also set `overwriteprotocol=https` to prevent SCP issues, since a custom demo is usually served via https.
 
 ---
 
@@ -56,7 +56,7 @@ Only top-level directories with a `Dockerfile` are built (not `archived/`):
 | 33 | 24.04 | 8.4 | `binsky/passman-dev:nc33_php8.4` | `binsky/passman-demo:nc33_php8.4` |
 | 32 | 24.04 | 8.4 | `binsky/passman-dev:nc32_php8.4` | — (single-stage Dockerfile, dev only) |
 
-Rolling dev tag: **`binsky/passman-dev:latest`** → same as `nc33_php8.4` (set in `ci/registry.json` → `dev_latest_context`).
+Rolling dev tag: **`binsky/passman-dev:latest`** → same as `nc34_php8.5` (set in `ci/registry.json` → `dev_latest_context`).
 
 ### Older stacks
 
@@ -69,8 +69,9 @@ Dockerfiles for Nextcloud 20–31 (various PHP versions) live under **`archived/
 ```
 passman-dev-docker-build/
 ├── entrypoint.sh
-├── nc33_php8.4/              # active: multi-stage (demo + dev)
-├── nc32_php8.4/              # active: single-stage (dev)
+├── nc34_php8.5/              # multi-stage (demo + dev)
+├── nc33_php8.4/              # multi-stage (demo + dev)
+├── nc32_php8.4/              # single-stage (dev)
 ├── archived/                 # legacy Dockerfiles (not built by CI)
 ├── ci/
 │   ├── registry.json
@@ -172,4 +173,4 @@ On push, three job types run:
 
 ### Local builds
 
-Each context may ship a `build.sh` that copies `entrypoint.sh` and runs `docker build` (see `nc33_php8.4/build.sh` for dev + demo targets). CI does not use `build.sh`; it invokes Buildx directly with the same contexts.
+Each context may ship a `build.sh` that copies `entrypoint.sh` and runs `docker build` (see `nc34_php8.5/build.sh` for dev + demo targets). CI does not use `build.sh`; it invokes Buildx directly with the same contexts.
