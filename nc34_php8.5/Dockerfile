@@ -82,6 +82,7 @@ RUN service mariadb restart && \
     rm /var/www/server/apps/passman/before_install.sh && \
     git clone --depth 1 -b $SETUP_NEXTCLOUD_VIEWER_BRANCH https://github.com/nextcloud/viewer.git /var/www/server/apps/viewer && \
     git clone --depth 1 -b $SETUP_NEXTCLOUD_NOTIFICATIONS_BRANCH https://github.com/nextcloud/notifications.git /var/www/server/apps/notifications && \
+    /usr/local/bin/composer install --no-dev -d /var/www/server/apps/notifications && \
     mv /var/www/server/* /var/www/html/ && \
     rm -r /var/www/server && \
     chown -R www-data:www-data /var/www
@@ -102,6 +103,7 @@ RUN service mariadb restart && \
     ./occ config:system:set trusted_domains 2 --value=172.17.0.2 && \
     ./occ config:system:set trusted_domains 3 --value=10.0.2.2 && \
     ./occ config:system:set trusted_domains 4 --value=demo.passman.cc && \
+    ./occ app:enable notifications && \
     chown -R www-data:www-data /var/www
 
 
