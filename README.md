@@ -52,11 +52,12 @@ Only top-level directories with a `Dockerfile` are built (not `archived/`):
 
 | NC | Ubuntu | PHP | Development | Demo |
 |----|--------|-----|-------------|------|
+| 35 | 26.04 | 8.5 | `binsky/passman-dev:nc35_php8.5` | `binsky/passman-demo:nc35_php8.5` |
 | 34 | 26.04 | 8.5 | `binsky/passman-dev:nc34_php8.5` | `binsky/passman-demo:nc34_php8.5` |
 | 33 | 24.04 | 8.4 | `binsky/passman-dev:nc33_php8.4` | `binsky/passman-demo:nc33_php8.4` |
 | 32 | 24.04 | 8.4 | `binsky/passman-dev:nc32_php8.4` | — (single-stage Dockerfile, dev only) |
 
-Rolling dev tag: **`binsky/passman-dev:latest`** → same as `nc34_php8.5` (set in `ci/registry.json` → `dev_latest_context`).
+Rolling dev tag: **`binsky/passman-dev:latest`** → same as `nc35_php8.5` (set in `ci/registry.json` → `dev_latest_context`).
 
 ### Older stacks
 
