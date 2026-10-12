@@ -26,8 +26,18 @@ env:
   CACHE_SCOPE_PREFIX: passman-docker
 
 jobs:
+  test-image-tags:
+    name: Tag plan tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Passman tag plan
+        run: python3 ci/test_image_tags.py
+
   matrix-prep:
     name: Prepare build matrix
+    needs: test-image-tags
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
@@ -242,12 +252,67 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.context }}-${{ matrix.build_mode }}-${{ matrix.target }}-arm64
 
-  merge-manifests:
-    name: Manifest ${{ matrix.context }} (${{ matrix.build_mode == 'stage' && matrix.target || 'final' }})
-    needs: [matrix-prep, build-amd64, build-arm64]
+  preserve-published-tags:
+    name: Keep previous Passman release tags
+    needs: matrix-prep
     if: >-
       github.event_name != 'pull_request' &&
       needs.matrix-prep.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Public tags are replaced only in merge-manifests. Copy the current
+      # rolling manifest to <context>-passman-<previous> first, so a pin bump
+      # does not drop the image that tag already points at.
+      - name: Snapshot rolling tags
+        env:
+          MATRIX_JSON: ${{ needs.matrix-prep.outputs.matrix }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          python3 ci/preserve_rolling_tags.py \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --before "${BEFORE_SHA}" \
+            > "$RUNNER_TEMP/retags.tsv"
+          if [ ! -s "$RUNNER_TEMP/retags.tsv" ]; then
+            echo "No rolling tags to snapshot"
+            exit 0
+          fi
+          while IFS=$'\t' read -r source dest; do
+            if [ -z "${source}" ] || [ -z "${dest}" ]; then
+              continue
+            fi
+            if docker buildx imagetools inspect "$dest" >/dev/null 2>&1; then
+              echo "Already present: $dest"
+              continue
+            fi
+            if ! docker buildx imagetools inspect "$source" >/dev/null 2>&1; then
+              echo "Source tag missing, skip: $source"
+              continue
+            fi
+            echo "Snapshot $source -> $dest"
+            docker buildx imagetools create -t "$dest" "$source"
+          done < "$RUNNER_TEMP/retags.tsv"
+
+  merge-manifests:
+    name: Manifest ${{ matrix.context }} (${{ matrix.build_mode == 'stage' && matrix.target || 'final' }})
+    needs: [matrix-prep, build-amd64, build-arm64, preserve-published-tags]
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.matrix-prep.outputs.should_run == 'true' &&
+      needs.preserve-published-tags.result == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

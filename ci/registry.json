@@ -2,5 +2,8 @@
   "namespace": "binsky",
   "dev_repository": "passman-dev",
   "demo_repository": "passman-demo",
-  "dev_latest_context": "nc35_php8.5"
+  "dev_latest_context": "nc35_php8.5",
+  "preserve_rolling_as": {
+    "nc35_php8.5": "2.6.3"
+  }
 }

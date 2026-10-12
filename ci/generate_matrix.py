@@ -3,6 +3,10 @@
 Discover image build matrix for GitHub Actions: dev (and demo when present) images per context.
 
 Reads ci/registry.json. Emits JSON with { "include": [...], "should_run": true|false } to stdout.
+
+When SETUP_PASSMAN_BRANCH is a release (for example 2.6.4), each dev and demo
+image also gets the tag <context>-passman-<version>. The unsuffixed context tag
+and passman-dev:latest stay rolling.
 """
 from __future__ import annotations
 
@@ -13,6 +17,13 @@ import sys
 from pathlib import Path
 
 DEMO_STAGE = re.compile(r"(?m)^FROM\s+\S+\s+AS\s+demo\s*$")
+PASSMAN_BRANCH = re.compile(
+    r"""(?m)^ENV[ \t]+SETUP_PASSMAN_BRANCH=(?:"([^"]+)"|'([^']+)'|([^\s#]+))"""
+)
+PASSMAN_RELEASE = re.compile(r"^v?(\d+\.\d+\.\d+)$")
+# Extra Hub tag kept when SETUP_PASSMAN_BRANCH moves to another release:
+#   <context>-passman-<version>
+PASSMAN_TAG_MARKER = "passman"
 
 
 def load_registry(repo_root: Path) -> dict:
@@ -47,6 +58,44 @@ def image_name(registry: dict, repo_suffix: str) -> str:
     return f"{ns}/{repo_suffix}"
 
 
+def passman_branch_from_text(text: str) -> str | None:
+    match = PASSMAN_BRANCH.search(text.replace("\r\n", "\n"))
+    if not match:
+        return None
+    raw = next(group for group in match.groups() if group is not None)
+    return raw.strip()
+
+
+def normalize_release(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    match = PASSMAN_RELEASE.fullmatch(raw.strip())
+    if not match:
+        return None
+    return match.group(1)
+
+
+def passman_release_from_text(text: str) -> str | None:
+    return normalize_release(passman_branch_from_text(text))
+
+
+def passman_release(repo_root: Path, context: str) -> str | None:
+    dockerfile = repo_root / context / "Dockerfile"
+    text = dockerfile.read_text(encoding="utf-8", errors="replace")
+    return passman_release_from_text(text)
+
+
+def passman_tag(context: str, release: str) -> str:
+    return f"{context}-{PASSMAN_TAG_MARKER}-{release}"
+
+
+def context_tags(image: str, context: str, release: str | None) -> list[str]:
+    tags = [f"{image}:{context}"]
+    if release:
+        tags.append(f"{image}:{passman_tag(context, release)}")
+    return tags
+
+
 def build_rows_for_context(
     repo_root: Path,
     registry: dict,
@@ -59,20 +108,20 @@ def build_rows_for_context(
     dev_image = image_name(registry, dev_repo)
 
     multi = has_demo_stage(repo_root, context)
+    release = passman_release(repo_root, context)
 
     if multi:
         demo_image = image_name(registry, demo_repo)
-        demo_tags = f"{demo_image}:{context}"
         rows.append(
             {
                 "context": context,
                 "build_mode": "stage",
                 "target": "demo",
-                "tags": demo_tags,
+                "tags": ",".join(context_tags(demo_image, context, release)),
             }
         )
 
-    dev_targets: list[str] = [f"{dev_image}:{context}"]
+    dev_targets = context_tags(dev_image, context, release)
     if latest_ctx and context == latest_ctx:
         dev_targets.append(f"{dev_image}:latest")
 
