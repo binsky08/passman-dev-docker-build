@@ -149,7 +149,7 @@ def expand_affected(
     """
     Return contexts to build, or None if everything should rebuild.
 
-    Full rebuild only when shared runtime inputs change (entrypoint.sh).
+    Full rebuild only when shared image inputs change (entrypoint.sh, demo-config.sh).
     ci/registry.json updates only rebuild dev_latest_context (for :latest tag).
     Other ci/ or .github/ changes do not rebuild images (use workflow_dispatch
     "rebuild all" when the pipeline itself needs a full republish).
@@ -159,7 +159,7 @@ def expand_affected(
         path = normalize_changed_path(raw)
         if not path:
             continue
-        if path == "entrypoint.sh":
+        if path in {"entrypoint.sh", "demo-config.sh"}:
             return None
         if path == "ci/registry.json":
             latest = registry.get("dev_latest_context")

@@ -10,7 +10,7 @@ ENV SETUP_NEXTCLOUD_VIEWER_BRANCH=stable34
 ENV SETUP_NEXTCLOUD_NOTIFICATIONS_BRANCH=stable34
 ENV SETUP_PHP_VERSION=php8.5
 ENV SETUP_PHPUNIT_VERSION=12
-ENV SETUP_PASSMAN_BRANCH=master
+ENV SETUP_PASSMAN_BRANCH=2.6.1
 ENV SETUP_PASSMAN_REPO=https://github.com/nextcloud/passman
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
@@ -112,6 +112,10 @@ FROM base AS demo
 COPY --from=build /var/www/html /var/www/html
 COPY --from=build /var/lib/mariadb /var/lib/mariadb
 
+ENV PASSMAN_IMAGE_FLAVOR=demo
+COPY demo-config.sh /usr/local/bin/demo-config.sh
+RUN chmod +x /usr/local/bin/demo-config.sh && demo-config.sh harden
+
 EXPOSE 80
 EXPOSE 443
 
@@ -123,6 +127,9 @@ CMD []
 
 
 FROM demo AS dev
+
+ENV PASSMAN_IMAGE_FLAVOR=dev
+RUN demo-config.sh restore
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         apt -y update && \

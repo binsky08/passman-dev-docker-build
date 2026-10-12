@@ -23,6 +23,12 @@ else
     service mysql start
 fi
 
+# Demo images bake config_is_read_only. Drop it only for this startup so the
+# trusted-domain update below can write config.php, then lock again before Apache.
+if [ "${PASSMAN_IMAGE_FLAVOR:-}" = "demo" ]; then
+    /usr/local/bin/demo-config.sh unlock || exit 1
+fi
+
 sudo -u www-data php /var/www/html/occ app:disable ${NC_ENABLE_APP_ID:-passman}
 sudo -u www-data php /var/www/html/occ app:enable ${NC_ENABLE_APP_ID:-passman}
 
@@ -30,6 +36,10 @@ if [ "$DEMO_EXTERNAL_FQDN" != "" ]; then
     sudo -u www-data php /var/www/html/occ config:system:set trusted_domains 5 --value=$DEMO_EXTERNAL_FQDN
     # force https usage/redirects for the demo when providing a custom fqdn (as as simple fix for the demo SCP issue)
     sudo -u www-data php /var/www/html/occ config:system:set overwriteprotocol --value=https
+fi
+
+if [ "${PASSMAN_IMAGE_FLAVOR:-}" = "demo" ]; then
+    sudo -u www-data php /var/www/html/occ config:system:set config_is_read_only --type=boolean --value=true || exit 1
 fi
 
 if [ ! -f /etc/ssl/private/cert.pem ] || [ ! -f /etc/ssl/private/privkey.pem ]; then

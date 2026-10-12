@@ -16,6 +16,15 @@ import preserve_rolling_tags as preserve
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def write_context(root: Path, context: str, branch: str, demo: bool) -> None:
+    body = f"FROM scratch\nENV SETUP_PASSMAN_BRANCH={branch}\n"
+    if demo:
+        body += "FROM scratch AS demo\n"
+    ctx = root / context
+    ctx.mkdir()
+    (ctx / "Dockerfile").write_text(body, encoding="utf-8")
+
+
 class ReleaseParseTests(unittest.TestCase):
     def test_unquoted_release(self) -> None:
         text = "ENV SETUP_PASSMAN_BRANCH=2.6.4\n"
@@ -35,108 +44,146 @@ class ReleaseParseTests(unittest.TestCase):
 
 
 class MatrixTagTests(unittest.TestCase):
-    def tags_for(self, context: str, target: str) -> list[str]:
+    def test_discovered_contexts_follow_pin_and_latest(self) -> None:
         registry = gm.load_registry(ROOT)
-        rows = gm.build_rows_for_context(ROOT, registry, context)
-        match = next(row for row in rows if row["target"] == target)
-        return match["tags"].split(",")
+        contexts = gm.discover_contexts(ROOT)
+        self.assertTrue(contexts)
+        dev_image = gm.image_name(registry, registry["dev_repository"])
+        demo_image = gm.image_name(registry, registry["demo_repository"])
+        latest = registry.get("dev_latest_context")
 
-    def test_latest_stack_keeps_rolling_tags_and_adds_passman_suffix(self) -> None:
-        dev = self.tags_for("nc35_php8.5", "dev")
-        demo = self.tags_for("nc35_php8.5", "demo")
-        self.assertEqual(
-            dev,
-            [
-                "binsky/passman-dev:nc35_php8.5",
-                "binsky/passman-dev:nc35_php8.5-passman-2.6.4",
-                "binsky/passman-dev:latest",
-            ],
-        )
-        self.assertEqual(
-            demo,
-            [
-                "binsky/passman-demo:nc35_php8.5",
-                "binsky/passman-demo:nc35_php8.5-passman-2.6.4",
-            ],
-        )
+        for context in contexts:
+            release = gm.passman_release(ROOT, context)
+            rows = {
+                row["target"]: row["tags"].split(",")
+                for row in gm.build_rows_for_context(ROOT, registry, context)
+            }
+            dev_tags = rows["dev"] if gm.has_demo_stage(ROOT, context) else rows[""]
+            self.assertEqual(dev_tags[0], f"{dev_image}:{context}")
+            suffixed = f"{dev_image}:{gm.passman_tag(context, release)}" if release else None
+            if release:
+                self.assertIn(suffixed, dev_tags)
+            else:
+                self.assertFalse(any(f"-{gm.PASSMAN_TAG_MARKER}-" in tag for tag in dev_tags))
+            if context == latest:
+                self.assertIn(f"{dev_image}:latest", dev_tags)
+            else:
+                self.assertNotIn(f"{dev_image}:latest", dev_tags)
 
-    def test_master_stack_has_no_passman_suffix(self) -> None:
-        dev = self.tags_for("nc34_php8.5", "dev")
-        self.assertEqual(dev, ["binsky/passman-dev:nc34_php8.5"])
+            if not gm.has_demo_stage(ROOT, context):
+                self.assertNotIn("demo", rows)
+                continue
+            demo_tags = rows["demo"]
+            self.assertEqual(demo_tags[0], f"{demo_image}:{context}")
+            self.assertNotIn(f"{demo_image}:latest", demo_tags)
+            if release:
+                self.assertIn(f"{demo_image}:{gm.passman_tag(context, release)}", demo_tags)
+            else:
+                self.assertFalse(any(f"-{gm.PASSMAN_TAG_MARKER}-" in tag for tag in demo_tags))
 
-    def test_older_pin_gets_its_own_suffix(self) -> None:
-        dev = self.tags_for("nc33_php8.4", "dev")
-        self.assertIn("binsky/passman-dev:nc33_php8.4-passman-2.5.1", dev)
-        self.assertNotIn("binsky/passman-dev:latest", dev)
+        self.assertIn(latest, contexts)
 
 
 class PreservePlanTests(unittest.TestCase):
-    def test_master_to_release_snapshots_mapped_version(self) -> None:
-        registry = gm.load_registry(ROOT)
-        plan = preserve.plan_preserves(
-            ROOT,
-            registry,
-            ["nc35_php8.5"],
-            {"nc35_php8.5": "ENV SETUP_PASSMAN_BRANCH=master\n"},
-        )
+    def registry(self, mapped: dict[str, str] | None = None) -> dict:
+        registry = {
+            "namespace": "binsky",
+            "dev_repository": "passman-dev",
+            "demo_repository": "passman-demo",
+            "dev_latest_context": "example",
+        }
+        if mapped is not None:
+            registry["preserve_rolling_as"] = mapped
+        return registry
+
+    def test_unpinned_previous_snapshots_mapped_version(self) -> None:
+        context = "example"
+        registry = self.registry({context: "1.2.3"})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_context(root, context, "9.9.9", demo=True)
+            plan = preserve.plan_preserves(
+                root,
+                registry,
+                [context],
+                {context: "ENV SETUP_PASSMAN_BRANCH=master\n"},
+            )
+        dev = "binsky/passman-dev"
+        demo = "binsky/passman-demo"
+        kept = gm.passman_tag(context, "1.2.3")
         self.assertEqual(
             plan,
             [
-                (
-                    "binsky/passman-dev:nc35_php8.5",
-                    "binsky/passman-dev:nc35_php8.5-passman-2.6.3",
-                ),
-                (
-                    "binsky/passman-demo:nc35_php8.5",
-                    "binsky/passman-demo:nc35_php8.5-passman-2.6.3",
-                ),
+                (f"{dev}:{context}", f"{dev}:{kept}"),
+                (f"{demo}:{context}", f"{demo}:{kept}"),
             ],
         )
 
     def test_same_pin_does_not_snapshot(self) -> None:
-        registry = gm.load_registry(ROOT)
-        plan = preserve.plan_preserves(
-            ROOT,
-            registry,
-            ["nc35_php8.5"],
-            {"nc35_php8.5": "ENV SETUP_PASSMAN_BRANCH=2.6.4\n"},
-        )
-        self.assertEqual(plan, [])
-
-    def test_release_bump_uses_git_pin_not_the_map(self) -> None:
-        registry = gm.load_registry(ROOT)
+        context = "example"
+        registry = self.registry({context: "1.2.3"})
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            ctx = root / "nc35_php8.5"
-            ctx.mkdir()
-            (ctx / "Dockerfile").write_text(
-                "FROM scratch\nENV SETUP_PASSMAN_BRANCH=2.6.5\nFROM scratch AS demo\n",
-                encoding="utf-8",
-            )
+            write_context(root, context, "9.9.9", demo=False)
             plan = preserve.plan_preserves(
                 root,
                 registry,
-                ["nc35_php8.5"],
-                {"nc35_php8.5": "ENV SETUP_PASSMAN_BRANCH=2.6.4\n"},
+                [context],
+                {context: "ENV SETUP_PASSMAN_BRANCH=9.9.9\n"},
+            )
+        self.assertEqual(plan, [])
+
+    def test_release_bump_uses_git_pin_not_the_map(self) -> None:
+        context = "example"
+        registry = self.registry({context: "1.2.3"})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_context(root, context, "9.9.9", demo=True)
+            plan = preserve.plan_preserves(
+                root,
+                registry,
+                [context],
+                {context: "ENV SETUP_PASSMAN_BRANCH=8.8.8\n"},
             )
         self.assertEqual(
             [dest for _, dest in plan],
             [
-                "binsky/passman-dev:nc35_php8.5-passman-2.6.4",
-                "binsky/passman-demo:nc35_php8.5-passman-2.6.4",
+                f"binsky/passman-dev:{gm.passman_tag(context, '8.8.8')}",
+                f"binsky/passman-demo:{gm.passman_tag(context, '8.8.8')}",
             ],
         )
 
+    def test_live_preserve_map_matches_discovered_contexts(self) -> None:
+        registry = gm.load_registry(ROOT)
+        contexts = set(gm.discover_contexts(ROOT))
+        dev_image = gm.image_name(registry, registry["dev_repository"])
+        demo_image = gm.image_name(registry, registry["demo_repository"])
+        for context, version in (registry.get("preserve_rolling_as") or {}).items():
+            self.assertIn(context, contexts)
+            release = gm.normalize_release(version)
+            self.assertIsNotNone(release)
+            assert release is not None
+            plan = preserve.plan_preserves(
+                ROOT,
+                registry,
+                [context],
+                {context: "ENV SETUP_PASSMAN_BRANCH=master\n"},
+            )
+            if release == gm.passman_release(ROOT, context):
+                self.assertEqual(plan, [])
+                continue
+            kept = gm.passman_tag(context, release)
+            self.assertIn((f"{dev_image}:{context}", f"{dev_image}:{kept}"), plan)
+            if gm.has_demo_stage(ROOT, context):
+                self.assertIn((f"{demo_image}:{context}", f"{demo_image}:{kept}"), plan)
+
     def test_matrix_contexts(self) -> None:
         payload = json.loads(
-            '{"include":[{"context":"nc35_php8.5","target":"dev"},'
-            '{"context":"nc35_php8.5","target":"demo"},'
-            '{"context":"nc34_php8.5","target":"dev"}]}'
+            '{"include":[{"context":"one","target":"dev"},'
+            '{"context":"one","target":"demo"},'
+            '{"context":"two","target":"dev"}]}'
         )
-        self.assertEqual(
-            preserve.contexts_from_matrix(payload),
-            ["nc35_php8.5", "nc34_php8.5"],
-        )
+        self.assertEqual(preserve.contexts_from_matrix(payload), ["one", "two"])
 
 
 if __name__ == "__main__":

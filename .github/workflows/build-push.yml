@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check Passman tag plan
-        run: python3 ci/test_image_tags.py
+        run: python3 -m unittest discover -s ci -p 'test_*.py'
 
   matrix-prep:
     name: Prepare build matrix
@@ -118,10 +118,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inject shared entrypoint
+      - name: Inject shared image files
         run: |
           set -euo pipefail
-          cp entrypoint.sh "${{ matrix.context }}/entrypoint.sh"
+          cp entrypoint.sh demo-config.sh "${{ matrix.context }}/"
 
       - name: Tags for registry (per-arch suffix on push)
         id: regtags
@@ -195,10 +195,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inject shared entrypoint
+      - name: Inject shared image files
         run: |
           set -euo pipefail
-          cp entrypoint.sh "${{ matrix.context }}/entrypoint.sh"
+          cp entrypoint.sh demo-config.sh "${{ matrix.context }}/"
 
       - name: Tags for registry (per-arch suffix)
         id: regtags

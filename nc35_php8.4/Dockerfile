@@ -112,6 +112,10 @@ FROM base AS demo
 COPY --from=build /var/www/html /var/www/html
 COPY --from=build /var/lib/mariadb /var/lib/mariadb
 
+ENV PASSMAN_IMAGE_FLAVOR=demo
+COPY demo-config.sh /usr/local/bin/demo-config.sh
+RUN chmod +x /usr/local/bin/demo-config.sh && demo-config.sh harden
+
 EXPOSE 80
 EXPOSE 443
 
@@ -123,6 +127,9 @@ CMD []
 
 
 FROM demo AS dev
+
+ENV PASSMAN_IMAGE_FLAVOR=dev
+RUN demo-config.sh restore
 
 RUN /bin/bash -c "export DEBIAN_FRONTEND=noninteractive" && \
         apt -y update && \
